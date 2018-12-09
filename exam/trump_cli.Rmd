@@ -71,7 +71,11 @@ data<-data %>% select(id,trump,clinton,both) %>% gather(who,present,-id) %>% fil
 
 data<-data %>% left_join(articles,by=c("id"="id"))
 
-ggplot(data,aes(x=id,y=1,fill=who))+
+
+# add column with boolean before or after election
+data$beforeEl<-as.Date(data$date)<as.Date("2016-11-08")
+
+ggplot(data,aes(x=date,y=1,fill=who))+
     geom_col()
 
 
@@ -155,10 +159,12 @@ co occorenze delle parole
 https://tm4ss.github.io/docs/Tutorial_5_Co-occurrence.html#2_counting_co-occurrences
 
 ```{r}
-name<-"clinton"  # specify the articles of whom
-mainWord<-"clinton"  # specify the word to consider as the main one
 
+require(Matrix)
+name<-"trump"  # specify the articles of whom
+mainWord<-"trump"  # specify the word to consider as the main one
 
+get_co_occ<-function(data,name,mainWord){
 trumpArticles<-data %>% filter(who==name & present) %>% anti_join(data %>% filter(who=="both"),by="id")
 text<-trumpArticles$article %>% tolower
 
@@ -175,7 +181,7 @@ tdm<-NULL
 binDTM<-binDTM[,frequentTerms] 
 
 
-require(Matrix)
+
 binDTM <- sparseMatrix(i = binDTM$i, j = binDTM$j, x = binDTM$v, dims = c(binDTM$nrow, binDTM$ncol), dimnames = dimnames(binDTM))
 
 # Matrix multiplication for cooccurrence counts
@@ -183,10 +189,10 @@ coocCounts <- t(binDTM) %*% binDTM
 
 
 cc<-as.matrix(coocCounts)
-```
 
-Trova co occorrenze più frequenti
-```{r}
+
+#Trova co occorrenze più frequenti
+
 diag(cc)<-0# sulla diagonale si ha il nuero di volte che è comparsa una certa parola
 
 # elimina parole poco usate
@@ -203,10 +209,7 @@ d<-data.frame(a=co_occ) %>% separate(a,sep = "-",into=c("a","b"))
 l<-(d %>% group_by(a) %>% summarise(count=n())) %>% rename(w=a)
 r<-(d %>% group_by(b) %>% summarise(count=n())) %>% rename(w=b)
 co_occ<-l %>% rbind( r) %>% arrange(desc(count))
-```
 
-
-```{r}
 
 calculateCoocStatistics<-function(coocTerm,binDTM,measure){
   k <- nrow(binDTM)
@@ -235,10 +238,7 @@ calculateCoocStatistics<-function(coocTerm,binDTM,measure){
     return(logsig)
   }
 }
-```
 
-
-```{r}
 term<-mainWord
 kij <- coocCounts[term, ]
 mutualInformationSig<-calculateCoocStatistics(term,binDTM,"mutual")
@@ -253,9 +253,9 @@ resultOverView <- data.frame(
   row.names = NULL)
 colnames(resultOverView) <- c("Freq-terms", "Freq", "MI-terms", "MI", "Dice-Terms", "Dice", "LL-Terms", "LL")
 print(resultOverView)
-```
 
-```{r}
+
+
 coocTerm<-mainWord # specify the word to consider as the main one
 coocs <- calculateCoocStatistics(term, binDTM, measure="LOGLIK")
 numberOfCoocs<-15
@@ -297,10 +297,10 @@ for (i in 1:numberOfCoocs){
 }
 
 resultGraph[sample(nrow(resultGraph), 6), ]
-```
 
 
-```{r}
+
+
 require(igraph)
 
 # Set the graph and type. In this case, "F" means "Force Directed"
@@ -351,6 +351,20 @@ plot(graphNetwork,
 #  geom_node_point()+
 #  geom_node_text()+
 #  geom_edge_link()
+}
+get_co_occ(data,name,mainWord)
+
+```
+
+```{r}
+get_co_occ(data,"clinton","clinton")
+
+
+get_co_occ(data %>% filter(beforeEl),"clinton","clinton")
+
+get_co_occ(data %>% filter(!beforeEl),"clinton","clinton")
+
+
 ```
 
 
@@ -407,7 +421,7 @@ beta_spread <- ap_topics %>%
 
 name<-"clinton"  # specify the articles of whom
 
-get_words<-function(name){
+get_words<-function(data,name,tf_idf=T){
 trumpArticles<-data %>% filter(who==name & present) %>% anti_join(data %>% filter(who=="both"),by="id")
 text<-trumpArticles$article %>% tolower
 
@@ -418,14 +432,92 @@ tokens<-trumpArticles %>% mutate(article=removePunctuation(article)) %>%  unnest
 # rimuovi stop words
 stop_words<-data.frame(word=stopwords("en"))
 tokens_without_stop_words<-tokens %>% anti_join(stop_words)
+
+if(tf_idf){
+#consider tf-idf
 words<-tokens_without_stop_words %>% group_by(datew,word) %>% summarise(count=n())
-#word used for each person during th weeks
-ww<-tokens_without_stop_words %>% group_by(who,datew,word) %>% summarise(count=n())
-# average usage of word
-wa<-ww %>% group_by(who,word) %>% summarise(avg=mean(count)) %>% arrange(-avg)
+ww<-words %>%  bind_tf_idf(word, datew, count) %>% mutate(count=tf_idf)
+} else{
+  words<-tokens_without_stop_words %>% group_by(datew,word) %>% summarise(count=n())
+  #word used for each person during th weeks
+ww<-words %>% group_by(datew,word) %>% summarise(count=sum(count))# average usage of word
+
+}
+wa<-ww %>% group_by(word) %>% summarise(avg=mean(count)) %>% arrange(-avg)
 return(wa)
 }
-w<-get_words("trump")
+w<-get_words(data,"trump",F)
+
+w<-get_words(data,"trump",T)
+
+
+
+wb<-get_words(data %>% filter(beforeEl),"trump",F)
+
+wordcloud(w$word,w$avg,max.words = 50)
+
+wa<-get_words(data %>% filter(!beforeEl),"trump",F)
+
+plotRanks <- function(a, b, lab_a=a,lab_b=b,labels.offset=0.1, arrow.len=0.1){
+  a<-rev(a)
+  b<-rev(b)
+  old.par <- par(mar=c(1,1,1,1))
+
+  # Find the length of the vectors
+  len.1 <- length(a)
+  len.2 <- length(b)
+
+  # Plot two columns of equidistant points
+  plot(rep(1, len.1), 1:len.1, pch=20, cex=0.8, 
+       xlim=c(0, 3), ylim=c(0, max(len.1, len.2)),
+       axes=F, xlab="", ylab="") # Remove axes and labels
+  points(rep(2, len.2), 1:len.2, pch=20, cex=0.8)
+
+  # Put labels next to each observation
+  text(rep(1-labels.offset, len.1), 1:len.1, lab_a)
+  text(rep(2+labels.offset, len.2), 1:len.2, lab_b)
+
+  # Now we need to map where the elements of a are in b
+  # We use the match function for this job
+  a.to.b <- match(a, b)
+
+  # Now we can draw arrows from the first column to the second
+  arrows(rep(1.02, len.1), 1:len.1, rep(1.98, len.2), a.to.b, 
+         length=arrow.len, angle=20)
+  par(old.par)
+}
+
+prev_o<-wb$word
+aft_o<-wa$word
+m<-abs(match(prev_o,aft_o)-seq(1,length(prev_o)))
+ii<-order(m)[1:30]
+prev<-prev_o[ii]
+prev2<-paste(ii,prev)
+f<-match(prev,aft_o)
+aft<-aft_o[f]
+aft2<-paste(f,aft[f])
+
+ii<-order(match(prev,prev_o))
+prev<-prev[ii]
+prev2<-prev2[ii]
+
+ii<-order(match(aft,aft_o))
+aft<-aft[ii]
+aft2<-paste(match(aft,aft_o),aft)
+#plotRanks(prev,aft,prev2,aft2)
+
+
+plotRanks(wb$word[1:30],wa$word[1:30])
+
+wcb<-get_words(data %>% filter(beforeEl),"clinton",F)
+
+#plotRanks(wb$word[1:30],wcb$word[1:30])
+
+
+wca<-get_words(data %>% filter(!beforeEl),"clinton",F)
+
+
+
 
 # show usage of words for trump and clinton during the weeks, in particular before and after the election
 ```
