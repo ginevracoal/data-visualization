@@ -2,3 +2,7 @@ slides
 .ipynb_checkpoints/
 *.csv
 eurovision-notebook
+.Rproj.user
+*.Rproj
+*.RData
+*.Rhistory
