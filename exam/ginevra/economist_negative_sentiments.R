@@ -1,3 +1,6 @@
+# Here I am adapting Doma's code to what I wanted to extract
+# from the data.
+
 library(feather)
 library(tidyverse)
 library(lubridate)
@@ -137,7 +140,7 @@ negative_df %>%
        subtitle = "Top 10 words associated to negative sentiments",
        fill="",
        caption = "Based on the online european editions of \"The Economist\"")+
-  geom_vline(aes(xintercept = as.numeric(as.Date("2015-09-01"))), col = "red")+
+  geom_vline(aes(xintercept = as.numeric(as.Date("2015-08-10"))), col = "red")+
   scale_fill_brewer(palette="Set2")
 
   
