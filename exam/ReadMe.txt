@@ -11,6 +11,7 @@ Here we are working on two dataset:
 	- Trump vs Clinton analysis
 - Alex
 	- Trump vs Clinton analysis
+	- Usage of words during time (before and after election)
 - Ginevra
 	- Multivariate dataset analysis
 	- Readapting Doma's code for negative sentiment analysis
