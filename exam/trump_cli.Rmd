@@ -32,6 +32,9 @@ articles$id<-seq(1,nrow(articles))
 
 articles$article<-gsub("Get 3 free articles per week, daily \n newsletters and more.","",articles$article)
 
+articles$article<-gsub("Upgrade your inbox and get our Daily Dispatch and Editor's Picks.","",articles$article)
+
+
 # some articles are wrong, less than 166 characters
 articles<-articles %>% filter(nchar(article)>166)
 ```
