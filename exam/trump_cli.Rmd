@@ -200,8 +200,8 @@ res<-list()
 wo<-words_ids %>% top_n(total_n,tf)
 
 # transform range of tf and tf_idf in [1,100]
-wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
-wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+wo$tf<-1+99*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+99*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
 
 wo<-wo %>% left_join(words_owners,by=c("word","word"))
 wo<-wo %>% left_join(words_diff,by=c("word","word"))
@@ -212,8 +212,8 @@ res[["tf"]]<-wo
 wo<-words_ids %>% top_n(total_n,tf_idf)
 
 # transform range of tf and tf_idf in [1,100]
-wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
-wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+wo$tf<-1+99*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+99*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
 
 
 wo<-wo %>% left_join(words_owners,by=c("word","word"))
@@ -227,8 +227,8 @@ wo<-bind_rows(wb,wa)
 
 
 # transform range of tf and tf_idf in [1,100]
-wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
-wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+wo$tf<-1+99*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+99*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
 
 
 wo<-wo %>% left_join(words_owners,by=c("word","word"))
