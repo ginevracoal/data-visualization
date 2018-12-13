@@ -75,6 +75,9 @@ data<-data %>% left_join(articles,by=c("id"="id"))
 # add column with boolean before or after election
 data$beforeEl<-as.Date(data$date)<as.Date("2016-11-08")
 
+library(lubridate)
+data$datew<-floor_date(as.Date(data$date),  unit="week")
+
 ggplot(data,aes(x=date,y=1,fill=who))+
     geom_col()
 
@@ -88,7 +91,6 @@ ggplot(data,aes(x=date,y=1,fill=who))+
 
 
 ```{r}
-data$datew<-format(as.Date(data$date), "%Y-%m")
 trumpClinton_edition<-data %>% group_by(datew,who) %>% summarise(count=n())
 ggplot(trumpClinton_edition,aes(x=datew,y=count,fill=who))+
     geom_col()
@@ -111,6 +113,8 @@ data<-data %>% left_join(totalWords,by=c("id"="id"))
 
 ```
 
+
+
 Considera uso delle parole
 ```{r}
 # quante volte è stata usata ciascuna parola e in quanti articoli
@@ -121,6 +125,157 @@ library(wordcloud)
 # in base a quante volte è stata usata una parola
 wordcloud(words$word,words$count,max.words = 50)
 ```
+
+
+```{r}
+wordcloud(words$word,words$articles,max.words = 50)
+```
+
+```{r}
+getArtsOf<-function(data,name){
+  arts_both<-data %>% filter((who=="both" & present))
+  if(name=="both"){
+    arts<-arts_both
+  }else{
+arts<-data %>% filter((who==name & present)) %>% anti_join(arts_both,by=c("id","id"))
+}
+
+arts$datew<-floor_date(as.Date(arts$date), unit="week")
+return(arts)
+}
+getWordsOf<-function(arts){
+
+# spezza il testo in singole parole
+tokens<-arts %>% mutate(article=removePunctuation(article)) %>%  unnest_tokens(word, article) %>% ungroup()
+
+
+# considera a gruppo l'articolo
+# per ogni articolo quante volte è apparsa ciascuna parola
+words<-tokens %>% group_by(id,word) %>% summarise(count=n())
+
+
+# rimuovi stop words
+stop_words<-data.frame(word=stopwords("en"))
+tokens_without_stop_words<-tokens %>% anti_join(stop_words)
+
+words_orig<-tokens_without_stop_words %>% group_by(id,word) %>% summarise(count=n())
+words_orig<-words_orig %>% left_join(arts,by=c("id"="id")) %>% ungroup()
+return(words_orig)
+
+}
+
+
+export_csv_data<-function(name,words_orig,words_owners,half_diff_n,total_n){
+words_orig<-words_orig %>% group_by(datew,word) %>% summarise(count=sum(count))
+
+#tot<-words_orig %>% ungroup() %>% group_by(word) %>% summarise(total=sum(count)) %>% select(word,total)
+
+tfw<-words_orig %>%  bind_tf_idf(word, datew, count)
+
+# add column with boolean before or after election
+tfw$beforeEl<-as.Date(tfw$datew)<as.Date("2016-11-08")
+
+# check words used before and not after and viceversa
+t<-tfw %>% group_by(word,beforeEl) %>% summarise(occ=n(),oc=n(),count = mean(count),tf_idf=mean(tf_idf),tf=mean(tf)) 
+
+f<-t %>% spread(beforeEl,oc) %>% rename(before=`TRUE`,after=`FALSE`)
+ff<-f %>% group_by(word) %>% summarise(occ_m=min(occ),occ_M=max(occ),tf_m=min(tf),tf_M=max(tf),before=sum(before,na.rm=T),after=sum(after,na.rm=T))
+ff$diff<-ff$after-ff$before
+
+words_diff<-ff %>% select(word,diff)
+
+most_before<-ff %>% top_n(half_diff_n,-diff) 
+most_after<-ff %>% top_n(half_diff_n,diff)
+
+
+
+words_ids<-tfw %>% group_by(word) %>% summarise(datews = paste0(datew, collapse = "|"),tf_idf=mean(tf_idf),tf=mean(tf)) 
+
+#words_ids<-words_ids %>% left_join(tot,by=c("word","word")) 
+#words_ids<-words_ids%>% mutate(cf=count/total)
+words_ids<-words_ids %>% ungroup()
+
+res<-list()
+
+wo<-words_ids %>% top_n(total_n,tf)
+
+# transform range of tf and tf_idf in [1,100]
+wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+
+wo<-wo %>% left_join(words_owners,by=c("word","word"))
+wo<-wo %>% left_join(words_diff,by=c("word","word"))
+wo$n_weeks<-nchar(wo$datews)/10
+res[["tf"]]<-wo
+
+
+wo<-words_ids %>% top_n(total_n,tf_idf)
+
+# transform range of tf and tf_idf in [1,100]
+wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+
+
+wo<-wo %>% left_join(words_owners,by=c("word","word"))
+wo<-wo %>% left_join(words_diff,by=c("word","word"))
+wo$n_weeks<-nchar(wo$datews)/10
+res[["tfidf"]]<-wo
+
+wb<-most_before %>% select(word) %>% left_join(words_ids)
+wa<-most_after %>% select(word) %>% left_join(words_ids)
+wo<-bind_rows(wb,wa)
+
+
+# transform range of tf and tf_idf in [1,100]
+wo$tf<-1+100*(wo$tf-min(wo$tf))/(max(wo$tf-min(wo$tf)))
+wo$tf_idf<-1+100*(wo$tf_idf-min(wo$tf_idf))/(max(wo$tf_idf-min(wo$tf_idf)))
+
+
+wo<-wo %>% left_join(words_owners,by=c("word","word"))
+wo<-wo %>% left_join(words_diff,by=c("word","word"))
+wo$n_weeks<-nchar(wo$datews)/10
+res[["bef_aft"]]<-wo
+return(res)
+}
+cl_art<-getArtsOf(data,"clinton")
+tr_art<-getArtsOf(data,"trump")
+
+both_art<-getArtsOf(data,"both") %>% bind_rows(cl_art) %>% bind_rows(tr_art)
+
+
+
+cl<-getWordsOf(cl_art)
+tr<-getWordsOf(tr_art)
+both_words<-getWordsOf(both_art)
+
+cl_not_tr<-cl %>% distinct(word) %>% anti_join(tr,by=c("word"="word")) %>% mutate(owner="clinton")
+tr_not_cl<-tr %>% distinct(word) %>% anti_join(cl,by=c("word"="word")) %>% mutate(owner="trump")
+cl_tr_words<-cl_not_tr %>% bind_rows(tr_not_cl) %>% ungroup() %>% select(word,owner)
+
+
+name<-"clinton"
+res<-export_csv_data(name,cl,cl_tr_words,10,1000)
+write_csv(res[["tf"]],paste0(name,"words_articles_tf.csv"))
+write_csv(res[["tfidf"]],paste0(name,"words_articles_tfidf.csv"))
+write_csv(res[["bef_aft"]],paste0(name,"words_bef_aft.csv"))
+
+name<-"trump"
+res<-export_csv_data(name,tr,cl_tr_words,10,1000)
+write_csv(res[["tf"]],paste0(name,"words_articles_tf.csv"))
+write_csv(res[["tfidf"]],paste0(name,"words_articles_tfidf.csv"))
+write_csv(res[["bef_aft"]],paste0(name,"words_bef_aft.csv"))
+
+
+name<-"both"
+res<-export_csv_data(name,both_words,cl_tr_words,10,1000)
+write_csv(res[["tf"]],paste0(name,"words_articles_tf.csv"))
+write_csv(res[["tfidf"]],paste0(name,"words_articles_tfidf.csv"))
+write_csv(res[["bef_aft"]],paste0(name,"words_bef_aft.csv"))
+
+
+```
+
+
 
 
 ```{r}
@@ -351,18 +506,23 @@ plot(graphNetwork,
 #  geom_node_point()+
 #  geom_node_text()+
 #  geom_edge_link()
+return (V(graphNetwork)$name)
 }
 get_co_occ(data,name,mainWord)
 
 ```
 
 ```{r}
-get_co_occ(data,"clinton","clinton")
+name<-"trump"
+x<-get_co_occ(data,name,name)
+```
 
+```{r}
+get_co_occ(data %>% filter(beforeEl),name,name)
+```
 
-get_co_occ(data %>% filter(beforeEl),"clinton","clinton")
-
-get_co_occ(data %>% filter(!beforeEl),"clinton","clinton")
+```{r}
+get_co_occ(data %>% filter(!beforeEl),name,name)
 
 
 ```
