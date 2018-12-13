@@ -6,3 +6,4 @@ eurovision-notebook
 *.Rproj
 *.RData
 *.Rhistory
+*.feather
