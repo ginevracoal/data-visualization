@@ -1,0 +1,223 @@
+---
+title: "The Economist's opinion"
+author: "Domagoj Korais, Ginevra Carbone, Alex Dagri"
+date: "December 12, 2018"
+output: 
+  revealjs::revealjs_presentation:
+    incremental: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(feather)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+library(tidytext)
+library(wordcloud)
+```
+
+
+
+
+```{r loading and cleaning ,echo=FALSE, cache=TRUE, warning = FALSE,message = FALSE }
+#Paragraph analysis
+
+#load db and separate in different years, primary key given by year, number_edition, number_article
+df=read_feather(path="my_data2_v1.feather")
+df$date=as.Date(df$date)
+df$year=year(df$date)
+df$ID <- seq.int(nrow(df))
+df=filter(df,year!=2014)
+#adding a single number for edition
+df$unique_edition=df$number_edition+((df$year-2015)*51)
+#cleaning html parsing problems
+df$article=gsub("Get 3 free articles per week, daily \n newsletters and more.","",df$article)
+df$article=gsub("Upgrade your inbox and get our Daily Dispatch and Editor's Picks.","",df$article)
+#Clean sections column
+df$section=gsub("print-edition icon Print edition \\|"," ",df$section)
+df$section=gsub("^\\s+","",df$section)
+df$location=gsub("\\| ","",df$location)
+#unique(df$section)
+
+
+#n_distinct(df$section) #26 is ok
+#n_distinct(df$location) #way too much
+#Length of articles
+df=df%>%
+  mutate(Nwords=str_count(article," ")-1)
+
+#filter very short articles
+df = df %>%
+  filter(Nwords>250)
+```
+
+
+
+
+# Main Idea
+
+## Study
+
+This
+
+
+# Data gathering
+
+## ![Data gathering](./data-visualization/exam/images/Selection_049.png)
+
+## A little magic transformed this:
+
+![](./data-visualization/exam/images/Selection_047.png)
+
+## Into that:
+
+![](./data-visualization/exam/images/Selection_050.png)
+
+
+## Collected data
+
+We collected 3 years of articles from "The Economist" magazine:
+
+- 12650 articles
+- 3 years collected: 2015,2016 and 2017.
+- Additional metadata such as title, date, section and place.
+
+
+
+
+# The analysis
+
+## First step: data cleaning
+
+
+##Frequencies
+```{r relative frequencies,echo=FALSE, cache=TRUE}
+#retain articles talking about trump (mentioning his name at least once)
+trump=df%>%
+  filter(str_detect(article,"Donald Trump"))%>%
+  add_column(flag="Trump")
+#same for Clinton
+clinton=df%>%
+  filter(str_detect(article,"Hillary Clinton"))%>%
+  add_column(flag="Clinton")
+#same for Brexit
+brexit=df%>%
+  filter(str_detect(article,"Brexit"))%>%
+  add_column(flag="Brexit")
+#test baseline
+test=df%>%
+  filter(!str_detect(article,"Trump") & !str_detect(article,"Clinton") )%>%
+  add_column(flag="Test")
+#scientific test
+science=df%>%
+  filter(section=="Science and technology")%>%
+  add_column(flag="Science")
+
+#merging
+politicalDf=bind_rows(trump,clinton,brexit,test,science)
+
+#plotting relative frequencies divided by section
+p=politicalDf%>%
+  filter(flag!="Test"&flag!="Brexit"&flag!="Science")%>%
+  group_by(section)%>%
+  filter(n()>=80)
+
+ggplot(p,aes(x=date,fill=as.factor(flag)))+
+  
+  geom_histogram(position = "fill",binwidth = 30)+
+  labs(x="Date (bins are 20 days)",
+       y="Normalized frequency",
+       title="Trump vs Clinton",
+       fill="",
+       caption = "Based on the online european editions of \"The Economist\"",
+       fill = "Topic")+
+  geom_vline(xintercept = as.Date("2015-06-16"), col='black', lwd=0.5)+
+  geom_vline(xintercept = as.Date("2016-11-08"), col='black', lwd=0.5)+
+  geom_label( mapping = aes(label = "Start", x=as.Date("2015-06-26"),y = 0),inherit.aes = FALSE)+
+  geom_label( mapping = aes(label = "End", x=as.Date("2016-11-15"),y = 0),inherit.aes = FALSE)+
+  scale_fill_manual(breaks = c("Clinton", "Trump"), 
+                      values=c("#b82e2e", "#316395"))+
+
+  theme_light()
+
+```
+
+
+```{r paragraph,cache=TRUE }
+#estraiamo i paragrafi
+
+trump=df%>%
+  unnest_tokens(paragraph,article, token = stringr::str_split, pattern = "\\.")%>%
+  filter(str_detect(paragraph,"trump"))%>%
+  add_column(flag="Trump")
+clinton=df%>%
+  unnest_tokens(paragraph,article, token = stringr::str_split, pattern = "\\.")%>%
+  filter(str_detect(paragraph,"clinton"))%>%
+  add_column(flag="Clinton")
+brexit=df%>%
+  unnest_tokens(paragraph,article, token = stringr::str_split, pattern = "\\.")%>%
+  filter(str_detect(paragraph,"brexit"))%>%
+  add_column(flag="Brexit")
+test_base=df%>%
+  unnest_tokens(paragraph,article, token = stringr::str_split, pattern = "\\.")%>%
+  add_column(flag="test")
+```
+
+```{r sentiment, cache=TRUE}
+
+#sentiment analysis
+set.seed(42)
+test_base1=sample_n(test_base,20000)
+politicalDf=bind_rows(trump,clinton,brexit,test_base1)
+
+tidyPoliticalDf=politicalDf%>%
+  unnest_tokens(word,paragraph)
+tidyNoStopPoliticalDf=tidyPoliticalDf%>%
+  anti_join(stop_words)
+
+
+#Afinn mean value
+afinn=get_sentiments(lexicon = "afinn")
+politicalSentiment=inner_join(tidyNoStopPoliticalDf,afinn,by = "word")
+politicalSentiment=politicalSentiment%>%
+  #group_by(ID)%>%
+  mutate(mean=median(score))
+
+
+
+```
+
+## Afinn dictionary
+
+```{r Afinn plot , echo=FALSE, cache=TRUE}
+
+politicalSentiment%>%
+  filter(flag=="Trump"|flag=="Clinton"| flag=="test")%>%
+  ggplot(aes(x=date,y=score,color=flag))+
+  #geom_point()+
+  geom_smooth(method = "loess", size = 1.5)+
+  #geom_smooth()+
+  labs(x="Date",
+       y="Normalized frequency",
+       title="Trump Afinn lexicon only paragraphs loess",
+       fill="",
+       caption = "Based on the online European editions of \"The Economist\"",
+       color = "Topic")+
+    scale_color_manual(breaks = c("Clinton", "Trump","test"), 
+                      values=c("#b82e2e", "#ff9900","#316395"))+
+geom_vline(xintercept = as.Date("2015-06-16"), col='black', lwd=0.5)+
+  geom_vline(xintercept = as.Date("2016-11-08"), col='black', lwd=0.5)+
+   theme_light()
+    
+
+  #geom_label( mapping = aes(label = "Start", x=as.Date("2015-06-26"),y = 0),inherit.aes = FALSE)+
+  #geom_label( mapping = aes(label = "End", x=as.Date("2016-11-15"),y = 0),inherit.aes = FALSE)+
+
+```
+
+
+
+## New window
+
+
