@@ -1,7 +1,7 @@
 ---
 title: "The Economist's opinion"
 author: "Domagoj Korais, Ginevra Carbone, Alex Dagri"
-date: "December 12, 2018"
+date: "December 17, 2018"
 output: 
   revealjs::revealjs_presentation:
     incremental: true
@@ -57,9 +57,9 @@ df = df %>%
 
 # Main Idea
 
-## Study
+- aa
 
-This
+
 
 
 # Data gathering
@@ -82,6 +82,8 @@ We collected 3 years of articles from "The Economist" magazine:
 - 12650 articles
 - 3 years collected: 2015,2016 and 2017.
 - Additional metadata such as title, date, section and place.
+- The data were collected using the Python libraries "Request" and "BeautifulSoup"
+- A total of 9 Gb of raw html documents has been downloaded
 
 
 
@@ -90,8 +92,28 @@ We collected 3 years of articles from "The Economist" magazine:
 
 ## First step: data cleaning
 
+- Parsing the HTML documents to obtain the articles
+- Cleaning the text from HTML annotations
+- Preparing it for text analysis 
 
-##Frequencies
+
+## Number of words in the articles
+```{r Distribution lenght,cache=TRUE,echo=FALSE}
+df%>%
+  filter( Nwords >250)%>%
+  ggplot(aes(x=Nwords))+
+  geom_histogram(binwidth = 30)+
+  labs(x="Words number (bins are 30 days)",
+       y="Count",
+       title="Distribution of articles length",
+       fill="",
+       caption = "Based on the online european editions of \"The Economist\"",
+       fill = "Topic")+
+  theme_minimal()+
+  scale_fill_gdocs()
+```
+
+## Who are we talking about?
 ```{r relative frequencies,echo=FALSE, cache=TRUE}
 #retain articles talking about trump (mentioning his name at least once)
 trump=df%>%
@@ -188,7 +210,14 @@ politicalSentiment=politicalSentiment%>%
 
 ```
 
-## Afinn dictionary
+## What do you think about me?
+- Sentiment analysis
+- Used the Afinn dataset (2476 words labelled from -5 (negative) to 5 (positive))
+- Compared the occurrences of those words in time associated to paragraphs containing some keywords
+-Let's see the results...
+
+
+## Time changes everything
 
 ```{r Afinn plot , echo=FALSE, cache=TRUE}
 
@@ -200,7 +229,7 @@ politicalSentiment%>%
   #geom_smooth()+
   labs(x="Date",
        y="Normalized frequency",
-       title="Trump Afinn lexicon only paragraphs loess",
+       title="Median sentiment evolution",
        fill="",
        caption = "Based on the online European editions of \"The Economist\"",
        color = "Topic")+
@@ -219,5 +248,6 @@ geom_vline(xintercept = as.Date("2015-06-16"), col='black', lwd=0.5)+
 
 
 ## New window
+
 
 
