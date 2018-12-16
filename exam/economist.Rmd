@@ -64,15 +64,15 @@ df = df %>%
 
 # Data gathering
 
-## ![Data gathering](./data-visualization/exam/images/Selection_049.png)
+## ![Data gathering](images/Selection_049.png)
 
 ## A little magic transformed this:
 
-![](./data-visualization/exam/images/Selection_047.png)
+![](images/Selection_047.png)
 
 ## Into that:
 
-![](./data-visualization/exam/images/Selection_050.png)
+![](images/Selection_050.png)
 
 
 ## Collected data
@@ -216,7 +216,6 @@ politicalSentiment=politicalSentiment%>%
 - Compared the occurrences of those words in time associated to paragraphs containing some keywords
 -Let's see the results...
 
-
 ## Time changes everything
 
 ```{r Afinn plot , echo=FALSE, cache=TRUE}
@@ -245,9 +244,149 @@ geom_vline(xintercept = as.Date("2015-06-16"), col='black', lwd=0.5)+
 
 ```
 
+## Changes in word usage
+
+We wanted to analyze daily word occurences and see which words had the most significant change in their usage.
+
+- Sentiment analysis allowed us to filter out the neutral words and only consider the **extreme** ones;
+- We calculated daily word occurrences for each month;
+- For each possible date in our dataset, we extracted the word showing the highest difference in occurrence from the average monthly amount.
 
 
-## New window
+## Changes in word usage
+
+```{r word occurrences , echo=FALSE, cache=TRUE, warning=FALSE, message = FALSE}
+
+library(feather)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+library(tidytext)
 
 
+# DATA PREPROCESSING
 
+#load db and separate in different years, primary key given by year, number_edition, number_article
+data=read_feather(path="my_data2_v1.feather")
+data$date=as.Date(data$date)
+data$year=year(data$date)
+data$ID <- seq.int(nrow(data))
+#df=filter(df,year!=2014) # now removing any year now
+#adding a single number for edition
+data$unique_edition=data$number_edition+((data$year-2015)*51)
+
+# DATA CLEANING
+
+# Clean text from wrongly parsed html
+#data$article=gsub("Get 3 free articles per week, daily \n newsletters and more.","",data$article)
+
+# remove rows having empty string as an article
+# sum(df[!(df$article==""), ]) # there are 3 empty articles we have to remove
+data <- data[!(data$article==""), ]
+
+# SENTIMENT ANALYSIS
+
+# split article column into single words
+df=data%>%unnest_tokens(word,article)
+
+#removing stop words
+data("stop_words")
+df = df%>% anti_join(stop_words)
+
+#dataset from tidytext
+#sentiments
+
+# scores from -5 to 5
+afinn=get_sentiments(lexicon = "afinn")
+
+# positive and negative
+loughran=get_sentiments(lexicon = "loughran")
+
+#######################################################
+
+# let's filter all extreme positive and negative sentiments
+
+# loughran negative or positive or litigious
+loughran_neg <- loughran %>% 
+  filter(sentiment %in% c("negative", "litigious"))
+loughran_pos <- loughran %>% 
+  filter(sentiment == "positive")
+
+# afinn <-1 and >1
+afinn_neg <- afinn %>% filter(score < -2)
+afinn_pos <- afinn %>% filter(score >2)
+
+extreme_words <- c(loughran_neg$word, loughran_pos$word,afinn_neg$word,afinn_pos$word)
+
+# I only want the dataset to have the extreme sentiment words
+extreme_df <- df %>% 
+  filter(word %in% extreme_words)
+
+# initializing sentiment column
+extreme_df$sentim_categ <- NA
+
+# positive words
+extreme_df$sentim_categ[extreme_df$word %in% c(loughran_pos$word, afinn_pos$word)] <- 1
+
+# negative words
+extreme_df$sentim_categ[extreme_df$word %in% c(loughran_neg$word, afinn_neg$word)] <- -1
+
+
+#######################################################
+
+# How are the peaks related to specific events?
+# I am not interested in the top words but in the 
+# significant differences from the mean value!
+
+# avg occurrence of all words in the month
+avg_daily_freq <- extreme_df %>% 
+  group_by("month"=month(date), word) %>% 
+  count(word) %>% 
+  summarise(avg_daily_freq = mean(n)/30)
+
+# then I consider all the differences from the mean of
+# current month
+daily_counts <- extreme_df %>% 
+  group_by(date, word, sentim_categ) %>% 
+  count(word) %>% 
+  rename(freq=n) %>% 
+  mutate(month=month(date))
+
+# finally, for each day I calculate the word having 
+# the highest distance from the monthly mean
+daily_extremes <- daily_counts %>%  
+  full_join(avg_daily_freq, by=c("month","word")) %>% 
+  mutate(std_freq=freq-avg_daily_freq) %>% 
+  group_by(date) %>% 
+  filter(std_freq==max(std_freq)) %>%
+  arrange(desc(std_freq))
+
+# Now i want to create a column indicating the elements 
+# I want to label in my plot
+num_labels = 20
+  
+max=daily_extremes$std_freq[num_labels]
+
+daily_extremes <- daily_extremes %>% 
+  mutate(extr_values=as.logical(std_freq > max)) %>% 
+  filter(std_freq >= 0) 
+
+daily_extremes$word[daily_extremes$extr_values == FALSE] <- NA
+daily_extremes <- daily_extremes[!duplicated(daily_extremes[c('date')]),]
+
+daily_extremes %>%
+  group_by(sentim_categ) %>% 
+  ggplot(aes(x=date, weight=std_freq, fill=word))+
+  geom_histogram(binwidth = 1, labels = word)+
+  #facet_grid("flag")+
+  labs(x="Date",
+       y="Frequency increment (%)",
+       title="Words having the most significant increment in frequency",
+       subtitle = "Calculated on monthly averages",
+       fill="",
+       caption = "Source: online european editions of \"The Economist\"")+
+  geom_text(aes(x=date, y=std_freq+1, label=word, color=word))+
+  theme(legend.position="none")+
+  theme(panel.background = element_blank())
+
+```

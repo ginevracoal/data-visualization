@@ -7,3 +7,6 @@ eurovision-notebook
 *.RData
 *.Rhistory
 *.feather
+exam/economist_files/
+exam/economist_cache/
+*.html

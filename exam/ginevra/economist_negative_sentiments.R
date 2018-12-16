@@ -257,8 +257,11 @@ daily_extremes$word[daily_extremes$extr_values == FALSE] <- NA
 daily_extremes <- daily_extremes[!duplicated(daily_extremes[c('date')]),]
 
 #write.csv(daily_extremes, file = "daily_extremes.csv")
-png(filename="ginevra/word_frequency.png", width = 1200, height= 600)
+#png(filename="ginevra/word_frequency.png", width = 1200, height= 600)
 
+# Daily word occurrences
+# We want to investigate the significant changes in the occurrence of
+# specific words. 
 
 daily_extremes %>%
   group_by(sentim_categ) %>% 
@@ -278,4 +281,4 @@ daily_extremes %>%
   #scale_x_date(date_breaks = "6 months",date_labels = "%Y-%b") 
  #+ geom_vline(aes(xintercept = as.numeric(as.Date("2017-10-30"))))
 
-dev.off()
+#dev.off()
